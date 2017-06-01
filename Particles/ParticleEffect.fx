@@ -1,8 +1,8 @@
 /*
 * This is based on Microsoft's 3D particle shader for XNA (http://xbox.create.msdn.com/en-US/education/catalog/sample/particle_3d).
-* I've adjusted it to be compatile with MonoGame's shader language, made it work with a deferred rendering system
-* by including the DepthMap and ScreenPos, made the particles soft (lines 152-159), 
-* and added more options for rotation and color change over time.
+* I've adjusted it to be compatile with MonoGame's shader language, made it work with a deferred rendering system, 
+* added soft particles (lines 152-159), and added more options for rotation and color change over time.
+*
 */
 
 #include "Macros.fxh"

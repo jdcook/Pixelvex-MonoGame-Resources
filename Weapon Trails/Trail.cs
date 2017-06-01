@@ -7,6 +7,14 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace MGB.Trails
 {
+    /*
+     * Renders a dynamic trail with a texture mapped to it.
+     * Uses a Catmull-rom spline to smooth the trail out and
+     * make it look nice. Each frame, Move() needs to be called
+     * to add the newest position to the trail. NUM_SMOOTH_POINTS
+     * is how many points will be added in between those positions
+     * for smoothing.
+     */
     public abstract class Trail
     {
         private const float MAX_ENDING_LENGTH = .2f;
@@ -15,6 +23,8 @@ namespace MGB.Trails
 
         protected MainGame Game;
         public bool Dead { get; private set; }
+        private bool dying = false;
+        protected bool Dying { get { return dying; } }
 
         public static BlendState overlapCompensationBlend = new BlendState()
         {
@@ -27,8 +37,19 @@ namespace MGB.Trails
         };
 
         private bool visible = true;
-        private bool dying = false;
-        protected bool Dying { get { return dying; } }
+        private bool smoothing = false;
+        private double lifeCounter;
+        private bool timed = false;
+        protected int usedSegments = 0;
+        protected int trailLength;//length of the trail, expressed in segments
+        protected float radius = .25f;
+        private TrailSegment[] controlPoints = new TrailSegment[4];
+        protected LinkedListNode<TrailSegment> curHead;
+        protected LinkedList<TrailSegment> segments = new LinkedList<TrailSegment>();
+        private LinkedList<TrailSegment> recycledSegments = new LinkedList<TrailSegment>();
+        //queue of new segments to add
+        private LinkedList<TrailSegment> segmentsToAdd = new LinkedList<TrailSegment>();
+
         protected int primitiveCount;
         protected VertexPositionTexture[] vertices;
         protected Effect effect;
@@ -37,23 +58,13 @@ namespace MGB.Trails
         private EffectParameter depthMapParam;
         protected BlendState blend = BlendState.AlphaBlend;
         protected CameraComponent camera;
-        private TrailSegment[] controlPoints = new TrailSegment[4];
-        private bool smoothing = false;
-        private double lifeCounter;
-        private bool timed = false;
-        protected int usedSegments = 0;
-        protected int trailLength;//length of the trail, expressed in segments
-        protected float radius = .25f;
-        //queue of new segments to add
-        private LinkedList<TrailSegment> segmentsToAdd = new LinkedList<TrailSegment>();
-        private LinkedList<TrailSegment> recycledSegments = new LinkedList<TrailSegment>();
-        protected LinkedList<TrailSegment> segments = new LinkedList<TrailSegment>();
-        protected LinkedListNode<TrailSegment> curHead;
         public Trail(MainGame game, int length, float radius, bool smooth)
         {
             this.Game = game;
             this.Dead = false;
             this.smoothing = smooth;
+            //This assumes you have an object somewhere called CameraComponent, that at least handles your
+            //View and Projection matrices.
             camera = (CameraComponent)game.Services.GetService(typeof(CameraComponent));
 
             this.trailLength = length;
@@ -222,7 +233,7 @@ namespace MGB.Trails
                 return;
             }
 
-            //allows the trail to close on its head when it is not moving anymore
+            //makes the trail close in on its head when it is not moving anymore
             if (segmentsToAdd.Count == 0)
             {
                 LinkedListNode<TrailSegment> f = curHead.Previous;
@@ -243,7 +254,9 @@ namespace MGB.Trails
             {
                 if (smoothing)
                 {
-                    //control points for interpolation
+                    //control points for interpolation.
+                    //move all the control points up one index,
+                    //and add the new control point to the end.
                     controlPoints[0].Copy(controlPoints[1]);
                     controlPoints[1].Copy(controlPoints[2]);
                     controlPoints[2].Copy(controlPoints[3]);
@@ -319,7 +332,67 @@ namespace MGB.Trails
             return prev;
         }
 
-        protected abstract void UpdateVertices();
+        protected override void UpdateVertices()
+        {
+            TrailSegment curSegment;
+            TrailSegment prevSegment;
+            int vertexIndex = 0;
+
+            LinkedListNode<TrailSegment> curNode = curHead.Previous;
+            if (curNode == null)
+            {
+                curNode = segments.Last;
+            }
+
+            int segmentIndex = vertexIndex / 2;
+            do
+            {
+                segmentIndex = vertexIndex / 2;
+                curSegment = curNode.Value;
+                prevSegment = GetNext(curNode).Value;
+
+                vertices[vertexIndex].Position = curSegment.Position - curSegment.Right * curSegment.Radius;
+                vertices[vertexIndex + 1].Position = curSegment.Position + curSegment.Right * curSegment.Radius;
+
+                float fStep = (segmentIndex + 1) * (TextureRepetition / trailLength);
+                if (fStep == 1)
+                {
+                    fStep = .99f;
+                }
+                vertices[vertexIndex].TextureCoordinate.X = 0;
+                vertices[vertexIndex].TextureCoordinate.Y = fStep;
+                vertices[vertexIndex + 1].TextureCoordinate.X = .99f;
+                vertices[vertexIndex + 1].TextureCoordinate.Y = fStep;
+
+                vertexIndex += 2;
+
+                if (curNode == curHead)
+                {
+                    curNode = null;
+                    break;
+                }
+
+                curNode = GetPrev(curNode);
+            }
+            while (curNode != null && segmentIndex < usedSegments - 1);
+
+
+            int indexToCopy = vertexIndex - 2;
+            //if we've started destroying segments, udpate all discarded vertices to the front position
+            while (vertexIndex < vertices.Length)
+            {
+                vertices[vertexIndex].Position = vertices[indexToCopy].Position;
+                vertices[vertexIndex + 1].Position = vertices[indexToCopy + 1].Position;
+
+                vertices[vertexIndex].TextureCoordinate.X = 0;
+                vertices[vertexIndex].TextureCoordinate.Y = 1;
+                vertices[vertexIndex + 1].TextureCoordinate.X = 1;
+                vertices[vertexIndex + 1].TextureCoordinate.Y = 1;
+
+                vertexIndex += 2;
+            }
+        }
+    }
 
         public virtual void Draw(CameraComponent camera)
         {
@@ -330,6 +403,7 @@ namespace MGB.Trails
                 Game.GraphicsDevice.RasterizerState = RasterizerState.CullNone;
                 Game.GraphicsDevice.SamplerStates[0] = SamplerState.LinearClamp;
 
+                //to render this, you need to pass in the View and Projection Matrices, as well as the Depth map if you're doing deferred rendering
                 viewParam.SetValue(camera.View);
                 projectionParam.SetValue(camera.Projection);
                 depthMapParam.SetValue(camera.DepthRT);
@@ -348,6 +422,9 @@ namespace MGB.Trails
 
     public class TrailSegment
     {
+        /*
+         * Data for a single segment of a trail
+         */
         public float Radius { get; private set; }
         public Vector3 Position { get; private set; }
         public Vector3 Right { get; private set; }

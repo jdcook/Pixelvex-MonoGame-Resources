@@ -11,6 +11,10 @@ namespace MGB
 {
     public class TrailManager : GameComponent
     {
+        /*
+         * A simple manager to update and draw all Trail components. Also initializes and stores
+         * the Effects for each kind of trail.
+         */
         public const string STR_SWORD = "sword";
 
         private Effect texturedEffect;
@@ -28,10 +32,12 @@ namespace MGB
         {
             effects = new Dictionary<string, Effect>();
 
+            texturedEffect = (Game as MainGame).LoadEffect("TrailTextureEffect");
+            texturedEffect.Parameters["alpha"].SetValue(1.0f);
 
             Effect swordTrail = texturedEffect.Clone();
             swordTrail.Parameters["colorTint"].SetValue(new Vector3(1, 1, 1));
-            swordTrail.Parameters["Texture"].SetValue(Game.Content.Load<Texture2D>("Textures\\Billboards\\sword_trail"));
+            swordTrail.Parameters["Texture"].SetValue(Game.Content.Load<Texture2D>("Textures\\sword_trail"));
             effects.Add(STR_SWORD, swordTrail);
         }
 

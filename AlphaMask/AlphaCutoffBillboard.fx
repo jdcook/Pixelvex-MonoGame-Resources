@@ -1,12 +1,8 @@
 /*
- * A basic shader to render a set of vertices with a texture mapped to it.
- * Specifically for a deferred rendering engine, since we pass in a DepthMap
- * and Screen Position.
+ * A shader for cutting off pixels that don't have the required alpha values.
  */
 
-
 #include "Macros.fxh"
-
 
 DECLARE_TEXTURE(Texture, 1);
 DECLARE_TEXTURE(DepthMap, 2);
@@ -17,6 +13,8 @@ cbuffer Parameters : register(b0)
 	float4x4 Projection;
 	float3 colorTint;
 	float alpha;
+	float alphaCutoff;
+	bool invertCutoff;
 }
 
 
@@ -51,7 +49,7 @@ float4 PS(VSOut input) : SV_Target
 {
 	float billboardDepth = input.ScreenPos.z / input.ScreenPos.w;
 	
-	//divide by homogenous coordinate because math. This is for deferred rendering.
+	//divide by homogenous coordinate
 	input.ScreenPos.xy /= input.ScreenPos.w;
 	//transform from [-1, 1] to [0, 1]
 	float2 texCoord = .5f * (float2(input.ScreenPos.x, -input.ScreenPos.y) + 1);
@@ -61,7 +59,36 @@ float4 PS(VSOut input) : SV_Target
 		discard;
 	}
 	
-	return SAMPLE_TEXTURE(Texture, input.TexCoord) * float4(colorTint, alpha);
+
+	//THE ACTUAL ALPHA CUTOFF PART
+	float4 color = SAMPLE_TEXTURE(Texture, input.TexCoord);
+	
+	//if transparent / black, discard (not part of texture)
+	if(color.a == 0)
+	{
+		discard;
+	}
+	
+	//otherwise, use cut off texture at given alpha value
+	if(invertCutoff)
+	{
+		if(color.a <= alphaCutoff)
+		{
+			discard;
+		}
+	}
+	else
+	{
+		if(color.a > alphaCutoff)
+		{
+			discard;
+		}
+	}
+	
+	color = color * float4(colorTint, 1);
+	//finally, use custom alpha (the texture's gradient is not shown in final product)
+	color.a = alpha;
+	return color;
 }
 
 TECHNIQUE(Billboard, VS, PS);

@@ -9,7 +9,7 @@ using SkinnedModelLib;
 
 namespace MGB.Trails
 {
-    public class ExampleTrail : ExampleTrail
+    public class ExampleTrail : Trail
     {
         private const string STR_ATTACH_BONE = "sword";
         private AnimatedModelComponent model;
