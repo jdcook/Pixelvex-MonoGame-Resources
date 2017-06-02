@@ -52,12 +52,14 @@ GBufferPSOutput PSDeferred(ToonVSMskOutput pin) : SV_Target0
 {
 	GBufferPSOutput output;
 
+	//THE ALPHA CUTOFF PART
 	float4 alphaMask = AlphaMaskTexture.Sample(AlphaMaskTextureSampler, pin.AlphaMaskTexCoord);
 	if(invertCutoff && alphaMask.a <= alphaCutoff || !invertCutoff && alphaMask.a > alphaCutoff)
 	{
 		discard;
 	}
 
+	//just generic model rendering
 	float4 tex = Texture.Sample(TextureSampler, pin.TexCoord);
 	output.Color.rgb = lerp(tex, colorTint, tintLerp);
 	output.Color.a = (hasOutline? 1 : 0);
